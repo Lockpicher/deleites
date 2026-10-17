@@ -29,6 +29,7 @@ export default function CustomersPage({ onSelectCustomerForPOS }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [formName, setFormName] = useState('');
+  const [formApodo, setFormApodo] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formAddress, setFormAddress] = useState('');
   const [formNotes, setFormNotes] = useState('');
@@ -61,12 +62,14 @@ export default function CustomersPage({ onSelectCustomerForPOS }) {
     if (cust) {
       setEditingCustomer(cust);
       setFormName(cust.nombre);
+      setFormApodo(cust.apodo || '');
       setFormPhone(cust.telefono);
       setFormAddress(cust.direccion || '');
       setFormNotes(cust.notas || '');
     } else {
       setEditingCustomer(null);
       setFormName('');
+      setFormApodo('');
       setFormPhone('');
       setFormAddress('');
       setFormNotes('');
@@ -87,6 +90,7 @@ export default function CustomersPage({ onSelectCustomerForPOS }) {
           .from(TABLES.CLIENTES)
           .update({
             nombre: formName.trim(),
+            apodo: formApodo.trim() || null,
             telefono: formPhone.trim(),
             direccion: formAddress.trim() || null,
             notas: formNotes.trim() || null,
@@ -102,6 +106,7 @@ export default function CustomersPage({ onSelectCustomerForPOS }) {
           .insert([
             {
               nombre: formName.trim(),
+              apodo: formApodo.trim() || null,
               telefono: formPhone.trim(),
               direccion: formAddress.trim() || null,
               notas: formNotes.trim() || null,
@@ -128,6 +133,7 @@ export default function CustomersPage({ onSelectCustomerForPOS }) {
       const q = searchTerm.toLowerCase();
       return (
         c.nombre.toLowerCase().includes(q) ||
+        (c.apodo && c.apodo.toLowerCase().includes(q)) ||
         c.telefono.includes(q) ||
         (c.direccion && c.direccion.toLowerCase().includes(q))
       );
@@ -232,7 +238,7 @@ export default function CustomersPage({ onSelectCustomerForPOS }) {
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Buscar por nombre, teléfono, dirección..."
+              placeholder="Buscar por nombre, apodo, WhatsApp, dirección..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-dark-900 border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
@@ -271,7 +277,14 @@ export default function CustomersPage({ onSelectCustomerForPOS }) {
                         {cust.nombre.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <h4 className="font-bold text-white text-sm leading-tight">{cust.nombre}</h4>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h4 className="font-bold text-white text-sm leading-tight">{cust.nombre}</h4>
+                          {cust.apodo && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 font-semibold">
+                              "{cust.apodo}"
+                            </span>
+                          )}
+                        </div>
                         {cust.notas && (
                           <p className="text-[10px] text-slate-400 italic line-clamp-1">{cust.notas}</p>
                         )}
@@ -285,7 +298,7 @@ export default function CustomersPage({ onSelectCustomerForPOS }) {
 
                   <div className="space-y-1 text-xs text-slate-300 pt-1 border-t border-white/5">
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-400 text-[11px]">Teléfono:</span>
+                      <span className="text-slate-400 text-[11px]">WhatsApp:</span>
                       <div className="flex items-center gap-1.5 font-mono">
                         <span>{cust.telefono}</span>
                         <a
@@ -349,7 +362,7 @@ export default function CustomersPage({ onSelectCustomerForPOS }) {
             <thead className="bg-dark-900/80 text-[11px] uppercase tracking-wider text-slate-400 font-bold border-b border-white/5">
               <tr>
                 <th className="px-5 py-3.5">Cliente</th>
-                <th className="px-5 py-3.5">Teléfono / WhatsApp</th>
+                <th className="px-5 py-3.5">WhatsApp</th>
                 <th className="px-5 py-3.5">Dirección de Entrega</th>
                 <th className="px-5 py-3.5">Última Compra</th>
                 <th className="px-5 py-3.5 text-right">Pedidos</th>
@@ -388,9 +401,16 @@ export default function CustomersPage({ onSelectCustomerForPOS }) {
                             {cust.nombre.charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <span className="font-bold text-white text-sm block">
-                              {cust.nombre}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-white text-sm block">
+                                {cust.nombre}
+                              </span>
+                              {cust.apodo && (
+                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 font-semibold">
+                                  "{cust.apodo}"
+                                </span>
+                              )}
+                            </div>
                             {cust.notas && (
                               <span className="text-[10px] text-slate-500 italic line-clamp-1">
                                 {cust.notas}
@@ -531,7 +551,20 @@ export default function CustomersPage({ onSelectCustomerForPOS }) {
 
               <div>
                 <label className="text-xs font-semibold text-slate-300 block mb-1">
-                  Teléfono / Celular *
+                  Apodo / Alias (Opcional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: Luchito, Doña Gloria, Flaco..."
+                  value={formApodo}
+                  onChange={(e) => setFormApodo(e.target.value)}
+                  className="w-full bg-dark-900 border border-white/10 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">
+                  Número de WhatsApp *
                 </label>
                 <input
                   type="tel"

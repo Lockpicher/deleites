@@ -16,7 +16,8 @@ import {
   Truck,
   Store,
   ChefHat,
-  PackageCheck
+  PackageCheck,
+  MessageSquare
 } from 'lucide-react';
 import { insforge, TABLES, ORDER_STATUSES, formatCurrency, formatDateTime, timeAgo } from '../lib/insforge';
 
@@ -348,9 +349,22 @@ export default function OrdersMonitorPage() {
                             </span>
                           </div>
 
-                          <div className="text-[11px] text-slate-400 flex items-center gap-1">
-                            <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                            <span>{order.cliente_telefono}</span>
+                          <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                            <div className="flex items-center gap-1">
+                              <MessageSquare className="w-3 h-3 text-emerald-400 shrink-0" />
+                              <span>{order.cliente_telefono}</span>
+                            </div>
+                            {order.cliente_telefono && (
+                              <a
+                                href={`https://wa.me/${order.cliente_telefono.replace(/\D/g, '').startsWith('57') ? order.cliente_telefono.replace(/\D/g, '') : `57${order.cliente_telefono.replace(/\D/g, '')}`}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold"
+                              >
+                                WhatsApp
+                              </a>
+                            )}
                           </div>
 
                           {isDelivery && order.direccion_entrega && (
@@ -460,9 +474,23 @@ export default function OrdersMonitorPage() {
                 <span className="text-slate-400">Cliente:</span>
                 <span className="font-bold text-white">{selectedOrder.cliente_nombre}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Teléfono:</span>
-                <span className="font-mono text-slate-200">{selectedOrder.cliente_telefono}</span>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">WhatsApp:</span>
+                <div className="flex items-center gap-2 font-mono text-slate-200">
+                  <span>{selectedOrder.cliente_telefono}</span>
+                  {selectedOrder.cliente_telefono && (
+                    <a
+                      href={`https://wa.me/${selectedOrder.cliente_telefono.replace(/\D/g, '').startsWith('57') ? selectedOrder.cliente_telefono.replace(/\D/g, '') : `57${selectedOrder.cliente_telefono.replace(/\D/g, '')}`}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30 text-[11px] flex items-center gap-1"
+                      title="Abrir chat de WhatsApp"
+                    >
+                      <MessageSquare className="w-3 h-3" />
+                      <span>Chat</span>
+                    </a>
+                  )}
+                </div>
               </div>
               {selectedOrder.direccion_entrega && (
                 <div className="flex justify-between">

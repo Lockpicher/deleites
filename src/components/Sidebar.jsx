@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import {
   ShoppingBag,
   Kanban,
@@ -7,26 +7,16 @@ import {
   UtensilsCrossed,
   BarChart3,
   Flame,
-  Menu,
-  X,
-  Clock,
-  Sparkles
+  Clock
 } from 'lucide-react';
 
 export default function Sidebar({ pendingCount = 0 }) {
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const location = useLocation();
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
-
-  // Close mobile drawer on route change
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [location.pathname]);
 
   const navItems = [
     {
@@ -74,49 +64,10 @@ export default function Sidebar({ pendingCount = 0 }) {
 
   return (
     <>
-      {/* 1. Mobile Top Header Bar */}
-      <div className="lg:hidden flex items-center justify-between px-3.5 py-2.5 bg-dark-900/95 backdrop-blur-md border-b border-white/10 sticky top-0 z-40">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-400 via-orange-500 to-flame-600 flex items-center justify-center shadow-glow-amber">
-            <Flame className="w-5 h-5 text-black fill-black" />
-          </div>
-          <div>
-            <h1 className="font-display font-black text-sm text-white leading-tight tracking-tight flex items-center gap-1.5">
-              ANTIGRAVITY <span className="text-amber-400 text-[10px] px-1.5 py-0.2 rounded bg-amber-400/10 border border-amber-400/30">FAST FOOD</span>
-            </h1>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-mono text-amber-400/90 font-semibold bg-dark-800 px-2 py-1 rounded-lg border border-white/5">
-            {currentTime.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
-          </span>
-          <button
-            onClick={() => setMobileOpen(!mobileOpen)}
-            className="p-1.5 rounded-lg bg-dark-800 text-slate-300 hover:text-white border border-white/10 active:scale-95 transition-all"
-            aria-label="Abrir menú"
-          >
-            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
-        </div>
-      </div>
-
-      {/* 2. Mobile Backdrop */}
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 lg:hidden transition-opacity"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
-
-      {/* 3. Persistent Sidebar (Desktop) / Slide-over Drawer (Mobile) */}
-      <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 w-72 bg-dark-900/95 backdrop-blur-2xl border-r border-white/10 flex flex-col transition-transform duration-300 ease-in-out lg:translate-x-0 ${
-          mobileOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
+      {/* 1. Persistent Lateral Sidebar (Desktop only) */}
+      <aside className="hidden lg:flex fixed top-0 bottom-0 left-0 z-50 w-72 bg-dark-900/95 backdrop-blur-2xl border-r border-white/10 flex-col">
         {/* Brand Header */}
-        <div className="p-5 border-b border-white/10 flex items-center justify-between">
+        <div className="p-5 border-b border-white/10">
           <div className="flex items-center gap-3">
             <div className="relative group">
               <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 via-orange-500 to-flame-600 flex items-center justify-center shadow-glow-orange">
@@ -127,7 +78,9 @@ export default function Sidebar({ pendingCount = 0 }) {
 
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="font-display font-black text-lg text-white tracking-tight">ANTIGRAVITY</span>
+                <span className="font-display font-black text-xl text-white tracking-tight">
+                  DELEITES
+                </span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/30">
@@ -137,13 +90,6 @@ export default function Sidebar({ pendingCount = 0 }) {
               </div>
             </div>
           </div>
-
-          <button
-            onClick={() => setMobileOpen(false)}
-            className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         {/* Navigation Links */}
@@ -236,7 +182,7 @@ export default function Sidebar({ pendingCount = 0 }) {
         </div>
       </aside>
 
-      {/* 4. Mobile Bottom Persistent Navigation Bar */}
+      {/* 2. Mobile Bottom Persistent Navigation Bar (Solo iconos abajo en teléfonos) */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-dark-900/95 backdrop-blur-xl border-t border-white/10 px-1 py-1.5 flex justify-around items-center shadow-2xl safe-area-bottom">
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -245,7 +191,7 @@ export default function Sidebar({ pendingCount = 0 }) {
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
-                `relative flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all ${
+                `relative flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
                   isActive
                     ? 'text-amber-400 font-bold'
                     : 'text-slate-400 hover:text-slate-200 font-medium'

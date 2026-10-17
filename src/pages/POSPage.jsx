@@ -14,7 +14,6 @@ import {
   CreditCard,
   Banknote,
   Send,
-  Printer,
   X,
   UserPlus,
   RefreshCw,
@@ -43,9 +42,11 @@ export default function POSPage({ onOrderCreated }) {
   const [customer, setCustomer] = useState(null);
   const [customerSearched, setCustomerSearched] = useState(false);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [matchingCustomers, setMatchingCustomers] = useState([]);
 
   // New customer form state
   const [newCustomerName, setNewCustomerName] = useState('');
+  const [newCustomerApodo, setNewCustomerApodo] = useState('');
   const [newCustomerPhone, setNewCustomerPhone] = useState('');
   const [newCustomerAddress, setNewCustomerAddress] = useState('');
   const [registeringCustomer, setRegisteringCustomer] = useState(false);
@@ -84,26 +85,42 @@ export default function POSPage({ onOrderCreated }) {
     fetchProducts();
   }, []);
 
-  // Search customer by phone
-  const handleSearchCustomer = async (phoneToSearch) => {
-    const cleaned = (phoneToSearch || phoneSearch).trim();
+  // Search customer by name, apodo, or WhatsApp
+  const handleSearchCustomer = async (termToSearch) => {
+    const cleaned = (termToSearch || phoneSearch).trim();
     if (!cleaned) return;
     try {
       setSearchingCustomer(true);
       setCustomerSearched(true);
-      const { data, error } = await insforge.database
-        .from(TABLES.CLIENTES)
-        .select('*')
-        .eq('telefono', cleaned)
-        .maybeSingle();
+      setMatchingCustomers([]);
+
+      const isDigitsOnly = /^\d+$/.test(cleaned);
+      let query = insforge.database.from(TABLES.CLIENTES).select('*');
+
+      if (isDigitsOnly) {
+        query = query.or(`telefono.ilike.%${cleaned}%`);
+      } else {
+        query = query.or(`nombre.ilike.%${cleaned}%,apodo.ilike.%${cleaned}%,telefono.ilike.%${cleaned}%`);
+      }
+
+      const { data, error } = await query.limit(8);
 
       if (error) throw error;
 
-      if (data) {
-        setCustomer(data);
+      if (data && data.length === 1) {
+        setCustomer(data[0]);
+        setMatchingCustomers([]);
+      } else if (data && data.length > 1) {
+        setMatchingCustomers(data);
+        setCustomer(null);
       } else {
         setCustomer(null);
-        setNewCustomerPhone(cleaned);
+        setMatchingCustomers([]);
+        if (isDigitsOnly) {
+          setNewCustomerPhone(cleaned);
+        } else {
+          setNewCustomerName(cleaned);
+        }
       }
     } catch (err) {
       console.error('Error searching customer:', err);
@@ -124,6 +141,7 @@ export default function POSPage({ onOrderCreated }) {
         .insert([
           {
             nombre: newCustomerName.trim(),
+            apodo: newCustomerApodo.trim() || null,
             telefono: newCustomerPhone.trim(),
             direccion: newCustomerAddress.trim() || null,
             total_gastado: 0,
@@ -139,10 +157,11 @@ export default function POSPage({ onOrderCreated }) {
       setShowRegisterModal(false);
       setPhoneSearch(data.telefono);
       setNewCustomerName('');
+      setNewCustomerApodo('');
       setNewCustomerPhone('');
       setNewCustomerAddress('');
     } catch (err) {
-      alert('Error registrando cliente: ' + (err.message || 'Verifica el número de teléfono.'));
+      alert('Error registrando cliente: ' + (err.message || 'Verifica los datos del cliente.'));
     } finally {
       setRegisteringCustomer(false);
     }
@@ -219,7 +238,7 @@ export default function POSPage({ onOrderCreated }) {
     }
 
     if (!customer) {
-      alert('Por favor busca o registra un cliente con su número de teléfono.');
+      alert('Por favor busca o registra un cliente por su nombre, apodo o WhatsApp.');
       return;
     }
 
@@ -231,7 +250,7 @@ export default function POSPage({ onOrderCreated }) {
     try {
       setProcessingOrder(true);
 
-      const orderCode = `#AG-${Math.floor(1000 + Math.random() * 9000)}`;
+      const orderCode = `#DEL-${Math.floor(1000 + Math.random() * 9000)}`;
       const itemsSummary = cart
         .map((i) => `${i.quantity}x ${i.product.nombre}`)
         .join(', ');
@@ -406,14 +425,15 @@ export default function POSPage({ onOrderCreated }) {
               <div className="relative flex-1">
                 <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
-                  type="tel"
-                  placeholder="Buscar por celular (ej: 3104567890)..."
+                  type="text"
+                  placeholder="Buscar por nombre, apodo o WhatsApp..."
                   value={phoneSearch}
                   onChange={(e) => {
                     setPhoneSearch(e.target.value);
                     if (!e.target.value) {
                       setCustomer(null);
                       setCustomerSearched(false);
+                      setMatchingCustomers([]);
                     }
                   }}
                   onKeyDown={(e) => {
@@ -443,7 +463,8 @@ export default function POSPage({ onOrderCreated }) {
               <button
                 type="button"
                 onClick={() => {
-                  setNewCustomerPhone(phoneSearch);
+                  setNewCustomerPhone(/^\d+$/.test(phoneSearch) ? phoneSearch : '');
+                  setNewCustomerName(!/^\d+$/.test(phoneSearch) ? phoneSearch : '');
                   setShowRegisterModal(true);
                 }}
                 className="px-4 py-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 font-semibold text-sm transition-all flex items-center justify-center gap-2 whitespace-nowrap"
@@ -453,13 +474,57 @@ export default function POSPage({ onOrderCreated }) {
               </button>
             </div>
 
+            {/* Multiple Matches Picker */}
+            {matchingCustomers.length > 1 && !customer && (
+              <div className="mt-3 p-3 bg-dark-900/90 border border-amber-500/30 rounded-xl space-y-2">
+                <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">
+                  Se encontraron {matchingCustomers.length} clientes. Selecciona uno:
+                </span>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {matchingCustomers.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        setCustomer(c);
+                        setMatchingCustomers([]);
+                      }}
+                      className="w-full text-left p-2.5 rounded-lg bg-dark-800 hover:bg-dark-700 border border-white/5 flex items-center justify-between text-xs transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white">{c.nombre}</span>
+                        {c.apodo && (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 font-semibold">
+                            "{c.apodo}"
+                          </span>
+                        )}
+                        <span className="text-slate-400 font-mono text-[11px] ml-1">
+                          WA: {c.telefono}
+                        </span>
+                      </div>
+                      <span className="text-emerald-400 font-mono font-semibold">
+                        {formatCurrency(c.total_gastado || 0)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Customer Details Display or Unregistered Alert */}
             {customer ? (
               <div className="mt-4 p-3.5 rounded-xl bg-dark-900/90 border border-amber-500/20 flex flex-wrap items-center justify-between gap-4">
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-bold text-white text-base">{customer.nombre}</span>
-                    <span className="text-xs text-slate-400 font-mono">({customer.telefono})</span>
+                    {customer.apodo && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30 font-semibold">
+                        "{customer.apodo}"
+                      </span>
+                    )}
+                    <span className="text-xs text-slate-400 font-mono">
+                      (WhatsApp: {customer.telefono})
+                    </span>
                   </div>
                   {customer.direccion ? (
                     <div className="text-xs text-slate-300 flex items-center gap-1.5">
@@ -491,6 +556,7 @@ export default function POSPage({ onOrderCreated }) {
                       setCustomer(null);
                       setPhoneSearch('');
                       setCustomerSearched(false);
+                      setMatchingCustomers([]);
                     }}
                     className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
                     title="Desvincular cliente"
@@ -499,11 +565,11 @@ export default function POSPage({ onOrderCreated }) {
                   </button>
                 </div>
               </div>
-            ) : customerSearched && !searchingCustomer ? (
+            ) : customerSearched && !searchingCustomer && matchingCustomers.length === 0 ? (
               <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>No se encontró ningún cliente con el número <strong>{phoneSearch}</strong>.</span>
+                  <span>No se encontró ningún cliente con <strong>"{phoneSearch}"</strong>.</span>
                 </div>
                 <button
                   onClick={() => setShowRegisterModal(true)}
@@ -962,7 +1028,20 @@ export default function POSPage({ onOrderCreated }) {
 
               <div>
                 <label className="text-xs font-semibold text-slate-300 block mb-1">
-                  Número de Celular *
+                  Apodo / Alias (Opcional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: Juli, Don Pedro, Vecina..."
+                  value={newCustomerApodo}
+                  onChange={(e) => setNewCustomerApodo(e.target.value)}
+                  className="w-full bg-dark-900 border border-white/10 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">
+                  Número de WhatsApp *
                 </label>
                 <input
                   type="tel"
@@ -1063,18 +1142,11 @@ export default function POSPage({ onOrderCreated }) {
 
             <div className="flex flex-col gap-2">
               <button
-                onClick={() => window.print()}
-                className="w-full py-2.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-slate-200 border border-white/10 text-xs font-semibold flex items-center justify-center gap-2"
-              >
-                <Printer className="w-4 h-4 text-amber-400" />
-                <span>Imprimir Ticket de Comanda</span>
-              </button>
-              <button
                 onClick={() => {
                   setShowSuccessModal(false);
                   setCompletedOrder(null);
                 }}
-                className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold shadow-glow-amber transition-colors"
+                className="w-full py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold shadow-glow-amber transition-colors"
               >
                 Tomar Siguiente Pedido
               </button>
