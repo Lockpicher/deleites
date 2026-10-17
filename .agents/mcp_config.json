@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "insforge": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@insforge/mcp@latest",
+        "--api_key",
+        "ik_2068688a89f5cd89cc7e009fc8e9c65100c59346",
+        "--api_base_url",
+        "https://insforge.kora.ovh"
+      ],
+      "env": {}
+    }
+  }
+}
