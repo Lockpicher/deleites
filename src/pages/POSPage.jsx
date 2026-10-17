@@ -49,6 +49,7 @@ export default function POSPage({ onOrderCreated }) {
   const [newCustomerApodo, setNewCustomerApodo] = useState('');
   const [newCustomerPhone, setNewCustomerPhone] = useState('');
   const [newCustomerAddress, setNewCustomerAddress] = useState('');
+  const [newCustomerNotes, setNewCustomerNotes] = useState('');
   const [registeringCustomer, setRegisteringCustomer] = useState(false);
 
   // Mobile view tab state ('catalog' | 'cart')
@@ -144,8 +145,11 @@ export default function POSPage({ onOrderCreated }) {
             apodo: newCustomerApodo.trim() || null,
             telefono: newCustomerPhone.trim(),
             direccion: newCustomerAddress.trim() || null,
+            notas: newCustomerNotes.trim() || null,
             total_gastado: 0,
-            total_pedidos: 0
+            total_pedidos: 0,
+            pedidos_domicilio: 0,
+            pedidos_local: 0
           }
         ])
         .select()
@@ -160,6 +164,7 @@ export default function POSPage({ onOrderCreated }) {
       setNewCustomerApodo('');
       setNewCustomerPhone('');
       setNewCustomerAddress('');
+      setNewCustomerNotes('');
     } catch (err) {
       alert('Error registrando cliente: ' + (err.message || 'Verifica los datos del cliente.'));
     } finally {
@@ -298,15 +303,20 @@ export default function POSPage({ onOrderCreated }) {
 
       if (itemsError) throw itemsError;
 
-      // 3. Update customer stats in deleites_clientes (LTV & order count)
+      // 3. Update customer stats in deleites_clientes (LTV, order count, delivery/local breakdown)
       const newTotalSpent = (Number(customer.total_gastado) || 0) + grandTotal;
       const newTotalOrders = (Number(customer.total_pedidos) || 0) + 1;
+      const isDom = deliveryType === 'DOMICILIO';
+      const newDomCount = (Number(customer.pedidos_domicilio) || 0) + (isDom ? 1 : 0);
+      const newLocalCount = (Number(customer.pedidos_local) || 0) + (isDom ? 0 : 1);
 
       await insforge.database
         .from(TABLES.CLIENTES)
         .update({
           total_gastado: newTotalSpent,
           total_pedidos: newTotalOrders,
+          pedidos_domicilio: newDomCount,
+          pedidos_local: newLocalCount,
           ultima_compra_at: new Date().toISOString()
         })
         .eq('id', customer.id);
@@ -513,57 +523,89 @@ export default function POSPage({ onOrderCreated }) {
 
             {/* Customer Details Display or Unregistered Alert */}
             {customer ? (
-              <div className="mt-4 p-3.5 rounded-xl bg-dark-900/90 border border-amber-500/20 flex flex-wrap items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-bold text-white text-base">{customer.nombre}</span>
-                    {customer.apodo && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30 font-semibold">
-                        "{customer.apodo}"
+              <div className="mt-4 p-3.5 rounded-xl bg-dark-900/90 border border-amber-500/20 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-white text-base">{customer.nombre}</span>
+                      {customer.apodo && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30 font-semibold">
+                          "{customer.apodo}"
+                        </span>
+                      )}
+                      <span className="text-xs text-slate-400 font-mono">
+                        (WhatsApp: {customer.telefono})
                       </span>
+                    </div>
+                    {customer.direccion ? (
+                      <div className="text-xs text-slate-300 flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span>{customer.direccion}</span>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-amber-400/80 italic">
+                        Sin dirección guardada (requerida solo para domicilio)
+                      </div>
                     )}
-                    <span className="text-xs text-slate-400 font-mono">
-                      (WhatsApp: {customer.telefono})
-                    </span>
                   </div>
-                  {customer.direccion ? (
-                    <div className="text-xs text-slate-300 flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                      <span>{customer.direccion}</span>
-                    </div>
-                  ) : (
-                    <div className="text-xs text-amber-400/80 italic">
-                      Sin dirección guardada (requerida solo para domicilio)
-                    </div>
-                  )}
+
+                  {(() => {
+                    const totalOrders = Number(customer.total_pedidos) || 0;
+                    const totalSpent = Number(customer.total_gastado) || 0;
+                    const avgTicket = totalOrders > 0 ? totalSpent / totalOrders : 0;
+                    const domCount = Number(customer.pedidos_domicilio) || 0;
+                    const localCount = Number(customer.pedidos_local) || 0;
+                    const preferenceBadge =
+                      domCount > localCount
+                        ? { label: '🛵 Suele pedir Domicilio', cls: 'text-amber-300 bg-amber-400/10 border-amber-400/20' }
+                        : localCount > domCount
+                        ? { label: '🍽️ Suele ir al Local', cls: 'text-blue-300 bg-blue-400/10 border-blue-400/20' }
+                        : totalOrders > 0
+                        ? { label: '⚖️ Canal Mixto', cls: 'text-purple-300 bg-purple-400/10 border-purple-400/20' }
+                        : { label: '✨ Cliente Nuevo', cls: 'text-slate-400 bg-slate-800 border-white/5' };
+
+                    return (
+                      <div className="flex items-center gap-2.5 flex-wrap text-xs">
+                        <div className="bg-dark-800 px-2.5 py-1.5 rounded-lg border border-white/5">
+                          <span className="text-slate-400 block text-[9px] uppercase font-bold">Pedidos</span>
+                          <span className="font-bold text-amber-400">{totalOrders}</span>
+                        </div>
+                        <div className="bg-dark-800 px-2.5 py-1.5 rounded-lg border border-white/5">
+                          <span className="text-slate-400 block text-[9px] uppercase font-bold">Total Gastado</span>
+                          <span className="font-bold text-emerald-400">{formatCurrency(totalSpent)}</span>
+                        </div>
+                        <div className="bg-dark-800 px-2.5 py-1.5 rounded-lg border border-white/5">
+                          <span className="text-slate-400 block text-[9px] uppercase font-bold">Ticket Prom.</span>
+                          <span className="font-bold text-orange-400">{formatCurrency(avgTicket)}</span>
+                        </div>
+                        <div className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold ${preferenceBadge.cls}`}>
+                          {preferenceBadge.label}
+                        </div>
+                        <button
+                          onClick={() => {
+                            setCustomer(null);
+                            setPhoneSearch('');
+                            setCustomerSearched(false);
+                            setMatchingCustomers([]);
+                          }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                          title="Desvincular cliente"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  })()}
                 </div>
 
-                <div className="flex items-center gap-4 text-xs">
-                  <div className="bg-dark-800 px-3 py-1.5 rounded-lg border border-white/5">
-                    <span className="text-slate-400 block text-[10px]">HISTÓRICO</span>
-                    <span className="font-bold text-amber-400">
-                      {customer.total_pedidos || 0} pedidos
+                {customer.notas && (
+                  <div className="text-xs text-amber-300/90 bg-amber-400/10 border border-amber-400/20 px-3 py-1.5 rounded-xl flex items-center gap-2">
+                    <span className="font-bold uppercase tracking-wider text-[10px] bg-amber-400/20 text-amber-300 px-1.5 py-0.5 rounded">
+                      Notas del Cliente
                     </span>
+                    <span className="italic">{customer.notas}</span>
                   </div>
-                  <div className="bg-dark-800 px-3 py-1.5 rounded-lg border border-white/5">
-                    <span className="text-slate-400 block text-[10px]">LTV (GASTO)</span>
-                    <span className="font-bold text-emerald-400">
-                      {formatCurrency(customer.total_gastado || 0)}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setCustomer(null);
-                      setPhoneSearch('');
-                      setCustomerSearched(false);
-                      setMatchingCustomers([]);
-                    }}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-                    title="Desvincular cliente"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
+                )}
               </div>
             ) : customerSearched && !searchingCustomer && matchingCustomers.length === 0 ? (
               <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-center justify-between">
@@ -1062,6 +1104,19 @@ export default function POSPage({ onOrderCreated }) {
                   placeholder="Ej: Calle 45 # 12-34 Torre 2 Apto 301"
                   value={newCustomerAddress}
                   onChange={(e) => setNewCustomerAddress(e.target.value)}
+                  className="w-full bg-dark-900 border border-white/10 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1">
+                  Notas de Preferencias o Fidelización (Opcional)
+                </label>
+                <textarea
+                  rows="2"
+                  placeholder="Ej: Sin cebolla, salsas aparte, timbre 201..."
+                  value={newCustomerNotes}
+                  onChange={(e) => setNewCustomerNotes(e.target.value)}
                   className="w-full bg-dark-900 border border-white/10 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-amber-400"
                 />
               </div>
