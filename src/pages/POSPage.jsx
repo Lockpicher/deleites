@@ -17,10 +17,13 @@ import {
   X,
   UserPlus,
   RefreshCw,
-  Utensils
+  Utensils,
+  Calendar,
+  Clock,
+  BookOpen
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { insforge, TABLES, CATEGORIES, PAYMENT_METHODS, formatCurrency } from '../lib/insforge';
+import { insforge, TABLES, CATEGORIES, PAYMENT_METHODS, formatCurrency, formatDateTime } from '../lib/insforge';
 
 export default function POSPage({ onOrderCreated }) {
   // Products state
@@ -35,6 +38,11 @@ export default function POSPage({ onOrderCreated }) {
   const [shippingFee, setShippingFee] = useState(5000);
   const [paymentMethod, setPaymentMethod] = useState('Efectivo');
   const [orderNotes, setOrderNotes] = useState('');
+
+  // Historical order / notebook migration state
+  const [isHistoricalOrder, setIsHistoricalOrder] = useState(false);
+  const [customOrderDate, setCustomOrderDate] = useState('');
+  const [historicalStatus, setHistoricalStatus] = useState('Entregado'); // 'Entregado' | 'Pendiente'
 
   // Customer search & selection
   const [phoneSearch, setPhoneSearch] = useState('');
@@ -260,6 +268,12 @@ export default function POSPage({ onOrderCreated }) {
         .map((i) => `${i.quantity}x ${i.product.nombre}`)
         .join(', ');
 
+      // Order creation timestamp (current moment by default, or manual past date for notebook migration)
+      const orderCreatedAt = (isHistoricalOrder && customOrderDate)
+        ? new Date(customOrderDate).toISOString()
+        : new Date().toISOString();
+      const orderStatus = isHistoricalOrder ? historicalStatus : 'Pendiente';
+
       // 1. Insert order into deleites_pedidos
       const { data: orderData, error: orderError } = await insforge.database
         .from(TABLES.PEDIDOS)
@@ -275,9 +289,10 @@ export default function POSPage({ onOrderCreated }) {
             subtotal: subtotal,
             total: grandTotal,
             metodo_pago: paymentMethod,
-            estado: 'Pendiente',
+            estado: orderStatus,
             notas: orderNotes.trim() || null,
-            items_resumen: itemsSummary
+            items_resumen: itemsSummary,
+            created_at: orderCreatedAt
           }
         ])
         .select()
@@ -310,6 +325,11 @@ export default function POSPage({ onOrderCreated }) {
       const newDomCount = (Number(customer.pedidos_domicilio) || 0) + (isDom ? 1 : 0);
       const newLocalCount = (Number(customer.pedidos_local) || 0) + (isDom ? 0 : 1);
 
+      // Only update ultima_compra_at if the new order is newer or equal
+      const existingLast = customer.ultima_compra_at ? new Date(customer.ultima_compra_at).getTime() : 0;
+      const orderTime = new Date(orderCreatedAt).getTime();
+      const finalLastPurchase = orderTime >= existingLast ? orderCreatedAt : customer.ultima_compra_at;
+
       await insforge.database
         .from(TABLES.CLIENTES)
         .update({
@@ -317,7 +337,7 @@ export default function POSPage({ onOrderCreated }) {
           total_pedidos: newTotalOrders,
           pedidos_domicilio: newDomCount,
           pedidos_local: newLocalCount,
-          ultima_compra_at: new Date().toISOString()
+          ultima_compra_at: finalLastPurchase
         })
         .eq('id', customer.id);
 
@@ -331,7 +351,8 @@ export default function POSPage({ onOrderCreated }) {
       setCompletedOrder({
         ...orderData,
         items: cart,
-        customer
+        customer,
+        isHistorical: isHistoricalOrder
       });
       setShowSuccessModal(true);
 
@@ -966,6 +987,88 @@ export default function POSPage({ onOrderCreated }) {
                 />
               </div>
 
+              {/* Optional: Past Order / Notebook Migration Controls */}
+              <div className="pt-2 border-t border-white/5 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextVal = !isHistoricalOrder;
+                    setIsHistoricalOrder(nextVal);
+                    if (nextVal && !customOrderDate) {
+                      const now = new Date();
+                      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                      setCustomOrderDate(now.toISOString().slice(0, 16));
+                    }
+                  }}
+                  className={`w-full flex items-center justify-between p-2 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                    isHistoricalOrder
+                      ? 'bg-amber-500/15 border-amber-400/40 text-amber-300 shadow-sm'
+                      : 'bg-dark-950 border-white/5 text-slate-400 hover:text-slate-200 hover:border-white/10'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>¿Registrar pedido pasado de cuaderno?</span>
+                  </div>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                    isHistoricalOrder ? 'bg-amber-400 text-black' : 'bg-dark-800 text-slate-500'
+                  }`}>
+                    {isHistoricalOrder ? 'Activado' : 'Opcional'}
+                  </span>
+                </button>
+
+                {isHistoricalOrder && (
+                  <div className="p-3 rounded-xl bg-dark-950 border border-amber-500/30 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5" />
+                        Fecha y Hora del Pedido Pasado
+                      </span>
+                      <span className="text-[10px] text-amber-400/80 font-medium">
+                        Migración de cuaderno
+                      </span>
+                    </div>
+
+                    <input
+                      type="datetime-local"
+                      value={customOrderDate}
+                      onChange={(e) => setCustomOrderDate(e.target.value)}
+                      className="w-full bg-dark-900 border border-amber-500/30 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-400"
+                    />
+
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">
+                        Estado al guardar:
+                      </label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setHistoricalStatus('Entregado')}
+                          className={`py-1.5 px-2 rounded-lg text-[11px] font-bold text-center border transition-all cursor-pointer ${
+                            historicalStatus === 'Entregado'
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                              : 'bg-dark-900 text-slate-400 border-white/5'
+                          }`}
+                        >
+                          ✓ Entregado (Histórico)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setHistoricalStatus('Pendiente')}
+                          className={`py-1.5 px-2 rounded-lg text-[11px] font-bold text-center border transition-all cursor-pointer ${
+                            historicalStatus === 'Pendiente'
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                              : 'bg-dark-900 text-slate-400 border-white/5'
+                          }`}
+                        >
+                          ⏳ Pendiente (Cocina)
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Price Breakdown */}
               <div className="space-y-1.5 pt-2 border-t border-white/5 text-xs">
                 <div className="flex justify-between text-slate-400">
@@ -1156,13 +1259,29 @@ export default function POSPage({ onOrderCreated }) {
             </div>
 
             <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">
-              ¡Pedido Enviado a Cocina!
+              {completedOrder.isHistorical
+                ? '¡Pedido Histórico Guardado!'
+                : '¡Pedido Enviado a Cocina!'}
             </span>
             <h3 className="font-display font-black text-2xl text-white mt-1">
               {completedOrder.codigo_pedido}
             </h3>
 
             <div className="my-4 p-4 rounded-2xl bg-dark-900/90 border border-white/10 text-left text-xs space-y-2">
+              <div className="flex justify-between text-slate-300">
+                <span className="text-slate-500">Fecha y Hora:</span>
+                <span className="font-semibold text-amber-300 font-mono">
+                  {formatDateTime(completedOrder.created_at)}
+                </span>
+              </div>
+              {completedOrder.isHistorical && (
+                <div className="flex justify-between text-slate-300">
+                  <span className="text-slate-500">Origen:</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                    📖 Migración Cuaderno ({completedOrder.estado})
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between text-slate-300">
                 <span className="text-slate-500">Cliente:</span>
                 <span className="font-bold text-white">{completedOrder.cliente_nombre}</span>
@@ -1196,15 +1315,40 @@ export default function POSPage({ onOrderCreated }) {
             </div>
 
             <div className="flex flex-col gap-2">
-              <button
-                onClick={() => {
-                  setShowSuccessModal(false);
-                  setCompletedOrder(null);
-                }}
-                className="w-full py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold shadow-glow-amber transition-colors"
-              >
-                Tomar Siguiente Pedido
-              </button>
+              {completedOrder.isHistorical ? (
+                <>
+                  <button
+                    onClick={() => {
+                      setShowSuccessModal(false);
+                      setCompletedOrder(null);
+                    }}
+                    className="w-full py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold shadow-glow-amber transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <span>📖 Migrar Siguiente Pedido de Cuaderno</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowSuccessModal(false);
+                      setCompletedOrder(null);
+                      setIsHistoricalOrder(false);
+                      setCustomOrderDate('');
+                    }}
+                    className="w-full py-2 rounded-xl bg-dark-800 hover:bg-dark-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Volver a Pedidos Normales (En Tiempo Real)
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => {
+                    setShowSuccessModal(false);
+                    setCompletedOrder(null);
+                  }}
+                  className="w-full py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold shadow-glow-amber transition-colors cursor-pointer"
+                >
+                  Tomar Siguiente Pedido
+                </button>
+              )}
             </div>
           </div>
         </div>
